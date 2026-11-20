@@ -34,6 +34,63 @@ final class MediaCleaner {
         }
     }
 
+    static void inspectBlocks(File file, Map<String, String> values) throws IOException {
+        try (RandomAccessFile in = new RandomAccessFile(file, "r")) {
+            switch (extension(file.getName())) {
+                case "jpg": case "jpeg":
+                    if (in.readUnsignedShort() != 0xffd8) return;
+                    while (in.getFilePointer() < in.length() && in.readUnsignedByte() == 0xff) {
+                        int marker = in.readUnsignedByte();
+                        while (marker == 255) marker = in.readUnsignedByte();
+                        if (marker == 0xda || marker == 0xd9) break;
+                        byte[] data = bytes(in, in.readUnsignedShort() - 2);
+                        if (marker == 0xe1 && prefix(data, "http://ns.adobe.com/xap/1.0/\0"))
+                            values.put("XMP packet", "Present");
+                        if (marker == 0xed) values.put("Photoshop and IPTC block", "Present");
+                        if (marker == 0xfe) values.put("JPEG comment", "Present");
+                        if (marker == 0xe2 && prefix(data, "ICC_PROFILE\0"))
+                            values.put("ICC color profile", "Present");
+                    }
+                    break;
+                case "webp": case "png":
+                    boolean webp = extension(file.getName()).equals("webp");
+                    in.seek(webp ? 12 : 8);
+                    while (in.length() - in.getFilePointer() >= 8) {
+                        long size = webp ? 0 : Integer.toUnsignedLong(in.readInt());
+                        String type = four(in);
+                        if (webp) size = uintLe(in);
+                        long end = in.getFilePointer() + size + (webp ? size & 1 : 4);
+                        if (end > in.length()) break;
+                        if (type.equals("XMP ")) values.put("XMP packet", "Present");
+                        if (type.equals("iCCP") || type.equals("ICCP")) values.put("ICC color profile", "Present");
+                        if (type.equals("tIME")) values.put("PNG modified date", "Present");
+                        if (Set.of("tEXt", "zTXt", "iTXt").contains(type)) {
+                            byte[] keyword = bytes(in, Math.min(size, 80));
+                            int n = 0;
+                            while (n < keyword.length && keyword[n] != 0) n++;
+                            String name = new String(keyword, 0, n, StandardCharsets.ISO_8859_1)
+                                .replaceAll("[\\p{Cc}\\p{Cf}]", " ");
+                            if (!name.isBlank()) values.put("PNG text · " + name, "Present");
+                        }
+                        in.seek(end);
+                    }
+                    break;
+                case "mp4": case "mov":
+                    while (in.getFilePointer() < in.length()) {
+                        Box atom = box(in, in.length());
+                        if (atom.kind.equals("moov")) {
+                            List<Box> items = new ArrayList<>();
+                            videoChildren(in, atom, items, new ArrayList<>(), false, 0, values);
+                            break;
+                        }
+                        in.seek(atom.end);
+                    }
+                    break;
+                default: break;
+            }
+        }
+    }
+
     private static byte[] bytes(RandomAccessFile file, long size) throws IOException {
         if (size < 0 || size > MAX_METADATA) throw new Unsupported("Metadata block too large");
         byte[] result = new byte[(int) size];
@@ -395,7 +452,7 @@ final class MediaCleaner {
             if (atom.kind.equals("moov")) {
                 if (movie) throw new Unsupported("Multiple video movie headers");
                 movie = true;
-                videoChildren(in, atom, redact, times, dates, 0);
+                videoChildren(in, atom, redact, times, dates, 0, null);
             }
             if (Set.of("moof", "uuid", "mfra", "meta", "XMP_", "xml ").contains(atom.kind))
                 throw new Unsupported("Fragmented or auxiliary video metadata");
@@ -427,7 +484,7 @@ final class MediaCleaner {
     }
 
     private static void videoChildren(RandomAccessFile in, Box parent, List<Box> redact, List<Span> times,
-        boolean dates, int depth)
+        boolean dates, int depth, Map<String, String> inspection)
         throws IOException {
         if (depth > 8) throw new Unsupported("Video nesting too deep");
         Map<Integer, String> keys = new HashMap<>();
@@ -438,9 +495,11 @@ final class MediaCleaner {
         }
         while (in.getFilePointer() < parent.end) {
             Box atom = box(in, parent.end);
+            if (inspection != null && (VIDEO_TAGS.contains(atom.kind) || atom.kind.equals("©day")))
+                inspection.put("Video tag · " + atom.kind, "Present");
             if (VIDEO_TAGS.contains(atom.kind) || (dates && atom.kind.equals("©day"))) redact.add(atom);
             else if (Set.of("udta", "trak", "meta", "mdia").contains(atom.kind))
-                videoChildren(in, atom, redact, times, dates, depth + 1);
+                videoChildren(in, atom, redact, times, dates, depth + 1, inspection);
             else if (dates && Set.of("mvhd", "tkhd", "mdhd").contains(atom.kind)) {
                 if (atom.end - atom.data < 4) throw new Unsupported("Video time fields");
                 int version = in.readInt() >>> 24;
@@ -468,6 +527,8 @@ final class MediaCleaner {
                 String name = keys.getOrDefault(key, "").toLowerCase(Locale.ROOT);
                 boolean identifying = name.contains("location") || name.contains("serial")
                     || name.contains("camera.identifier") || name.matches("(?:.*\\.)?(?:make|model|artist|author|comment|description|software|title|owner|encoder|copyright)");
+                if (inspection != null && (!name.isEmpty() || VIDEO_TAGS.contains(atom.kind) || atom.kind.equals("©day")))
+                    inspection.put("Video tag · " + (name.isEmpty() ? atom.kind : name), "Present");
                 if (VIDEO_TAGS.contains(atom.kind) || identifying || (dates && (atom.kind.equals("©day") || (name.contains("creationdate") || name.equals("creation_time")))))
                     redact.add(atom);
                 else if (atom.kind.equals("----")) throw new Unsupported("Custom video metadata");

@@ -21,6 +21,9 @@ with tempfile.TemporaryDirectory() as directory:
         return run("java", "-cp", str(work), "app.mediascrub.RunCleaner",
                    str(before), str(after), str(strip_dates).lower())
 
+    def fields(file):
+        return run("java", "-cp", str(work), "app.mediascrub.RunCleaner", str(file)).splitlines()
+
     image = Image.effect_noise((600, 400), 100).convert("RGB")
     exif = Image.Exif()
     exif[0x0112] = 6
@@ -52,6 +55,9 @@ with tempfile.TemporaryDirectory() as directory:
         sub = tags.get_ifd(0x8769)
         assert sub[0x9003] == "2024:01:12 13:45:55" and sub[0xa001] == 1 and 0xa431 not in sub, ext
         assert "Author" not in result.info, ext
+        assert "ICC color profile" in fields(before) and "ICC color profile" in fields(after), ext
+        if ext == "png":
+            assert "PNG text · Author" in fields(before) and "PNG text · Author" not in fields(after)
         second = work / f"second.{ext}"
         assert clean(after, second) == "clean"
         assert clean(before, second, True) == "changed"
@@ -81,6 +87,9 @@ with tempfile.TemporaryDirectory() as directory:
         probe = json.loads(run("ffprobe", "-v", "error", "-show_format", "-print_format", "json", str(after)))
         assert "40.1234" not in str(probe) and "PrivateArtist" not in str(probe), ext
         assert len(before.read_bytes()) == len(after.read_bytes()), ext
+        old_fields = fields(before)
+        assert any("artist" in field.lower() or "©ART" in field for field in old_fields), ext
+        assert not any("artist" in field.lower() or "©ART" in field for field in fields(after)), ext
         assert "2024-01-12" in str(probe), ext
         assert clean(after, work / f"second.{ext}") == "clean"
         no_dates = work / f"no-dates.{ext}"

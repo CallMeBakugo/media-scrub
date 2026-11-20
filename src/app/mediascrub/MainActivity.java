@@ -10,12 +10,14 @@ import android.view.*;
 import android.widget.*;
 
 public final class MainActivity extends Activity {
-    private static final int PICK = 410;
+    private static final int PICK = 410, INSPECT = 411;
     private SharedPreferences settings;
     private TextView folder, status;
     private LinearLayout panel;
     private Switch dates, auto;
-    private Button preview, clean;
+    private Button preview, clean, inspect, recheck;
+    private Uri inspectedUri;
+    private MetadataInspector.Report firstInspection;
     private boolean busy;
     private final SharedPreferences.OnSharedPreferenceChangeListener listener = (prefs, key) -> runOnUiThread(this::render);
 
@@ -66,6 +68,12 @@ public final class MainActivity extends Activity {
         preview = button("Preview scan", () -> run(false));
         clean = button("Clean now", () -> confirm("Clean the selected folder?",
             "Media Scrub will update supported files at their existing locations.", () -> run(true)));
+        inspect = button("Inspect one file", () -> {
+            Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("*/*").putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"image/*", "video/*"});
+            startActivityForResult(pick, INSPECT);
+        });
+        recheck = button("Recheck the inspected file", () -> inspect(inspectedUri, true));
         status = label("", 16);
         render();
     }
@@ -101,6 +109,9 @@ public final class MainActivity extends Activity {
         preview.setEnabled(!busy && !selected.isEmpty());
         clean.setEnabled(!busy && !selected.isEmpty());
         dates.setEnabled(!busy);
+        inspect.setEnabled(!busy);
+        recheck.setVisibility(firstInspection == null ? View.GONE : View.VISIBLE);
+        recheck.setEnabled(!busy);
         auto.setEnabled(!busy && !selected.isEmpty());
         auto.setChecked(settings.getBoolean(Scanner.AUTO, false));
         status.setText(busy ? "Scanning…" : settings.getString(Scanner.RESULT, "Run a preview to see what would change."));
@@ -126,7 +137,12 @@ public final class MainActivity extends Activity {
 
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
-        if (request != PICK || result != RESULT_OK || data == null || data.getData() == null) return;
+        if (result != RESULT_OK || data == null || data.getData() == null) return;
+        if (request == INSPECT) {
+            inspect(data.getData(), false);
+            return;
+        }
+        if (request != PICK) return;
         Uri uri = data.getData();
         try {
             String id = DocumentsContract.getTreeDocumentId(uri);
@@ -137,6 +153,74 @@ public final class MainActivity extends Activity {
         } catch (IllegalArgumentException error) {
             Toast.makeText(this, "Choose a folder in this profile’s internal shared storage.", Toast.LENGTH_LONG).show();
         }
+    }
+
+    private void inspect(Uri uri, boolean compare) {
+        if (busy || uri == null) return;
+        busy = true;
+        render();
+        boolean stripDates = settings.getBoolean(Scanner.DATES, false);
+        new Thread(() -> {
+            try {
+                MetadataInspector.Report report = MetadataInspector.inspect(getApplicationContext(), uri, stripDates);
+                runOnUiThread(() -> {
+                    busy = false;
+                    if (isDestroyed()) return;
+                    if (!compare) {
+                        inspectedUri = uri;
+                        firstInspection = report;
+                    }
+                    render();
+                    showInspection(report, compare ? firstInspection : null);
+                });
+            } catch (java.io.IOException | RuntimeException error) {
+                runOnUiThread(() -> {
+                    busy = false;
+                    if (isDestroyed()) return;
+                    render();
+                    new AlertDialog.Builder(this).setTitle("Could not inspect the file")
+                        .setMessage("Choose it again if it was moved or replaced. " + error.getMessage())
+                        .setPositiveButton("OK", null).show();
+                });
+            }
+        }, "Metadata inspection").start();
+    }
+
+    private void showInspection(MetadataInspector.Report report, MetadataInspector.Report previous) {
+        java.util.Map<String, String> before = previous == null ? report.current() : previous.current();
+        java.util.Map<String, String> after = previous == null ? report.preview() : report.current();
+        ScrollView scroll = new ScrollView(this);
+        TextView text = new TextView(this);
+        text.setTextIsSelectable(true);
+        text.setPadding(dp(22), dp(12), dp(22), dp(14));
+        scroll.addView(text);
+        android.text.SpannableStringBuilder body = new android.text.SpannableStringBuilder();
+        body.append(previous != null ? "Original inspection → Saved file now" :
+            after == null ? "Metadata on the selected file" : "Current file → Cleanup preview");
+        body.append("\n").append(previous == null ? report.detail() : "This comparison uses a fresh read of the selected file.");
+        java.util.Set<String> names = new java.util.LinkedHashSet<>(before.keySet());
+        if (after != null) names.addAll(after.keySet());
+        if (names.isEmpty()) body.append("\n\nNo recognized metadata fields found.");
+        for (String name : names) {
+            String initial = before.get(name);
+            String updated = after == null ? null : after.get(name);
+            body.append("\n\n").append(name).append("\n");
+            if (after == null || java.util.Objects.equals(initial, updated)) {
+                body.append(initial);
+                continue;
+            }
+            int start = body.length();
+            if (initial != null) body.append(initial).append("\n");
+            if (updated == null) body.append(previous == null ? "Will be removed" : "No longer detected");
+            else body.append(previous == null ? "Preview: " : "Saved: ").append(updated);
+            body.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
+                start, body.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        body.append("\n\nThis view lists recognized fields and metadata blocks.");
+        text.setText(body);
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle(report.filename())
+            .setView(scroll).setPositiveButton("Done", null).create();
+        dialog.show();
     }
 
     private void run(boolean edit) {

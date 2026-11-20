@@ -12,6 +12,12 @@ Media Scrub removes common identifying metadata from shared photos and videos in
 
 The default date setting keeps common embedded capture dates. The date switch removes the date fields this release supports. Filesystem timestamps and names can still expose dates. Shared internal storage is scanned within the selected profile and permission scope. **Use shared storage** scans all visible shared folders in that profile.
 
+## Inspect one file
+
+Tap **Inspect one file** and select a photo or video. The report compares recognized fields on the current file with a cleanup preview, using your current date setting. Bold rows show the differences. Some blocks are listed by name without displaying their contents. The preview leaves the selected file untouched.
+
+After cleaning the folder, tap **Recheck the inspected file** to compare the first read with a fresh read of the saved file. The comparison is kept for the current app screen. If Android revokes the picker link after a replacement, select the file again to inspect its current metadata. The optional inspector accepts files up to 512 MiB.
+
 ## Format coverage
 
 - JPEG, PNG, WebP. The app removes identifying EXIF fields, common standalone XMP, PNG text comments, and JPEG comments. It keeps orientation, embedded ICC profiles, and encoded pixels. It skips recognized motion photos, multi-image JPEGs, auxiliary display metadata such as Ultra HDR gain maps, and JPEG Photoshop resources where safe IPTC removal is pending.
