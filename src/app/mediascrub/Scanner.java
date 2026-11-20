@@ -10,6 +10,9 @@ import android.system.StructStat;
 
 import java.io.*;
 import java.nio.file.*;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 import java.util.ArrayDeque;
 import java.util.Set;
 import java.util.UUID;
@@ -105,6 +108,7 @@ final class Scanner {
                         stage = candidate;
                     }
                     boolean needsChange = MediaCleaner.clean(file, stage, dates);
+                    if (!signature.equals(signature(file, dates))) { waiting++; continue; }
                     if (needsChange && edit) {
                         if (Thread.currentThread().isInterrupted() ||
                             (background && (!settings.getBoolean(AUTO, false) ||
@@ -112,11 +116,16 @@ final class Scanner {
                             break;
                         if (!stage.setLastModified(file.lastModified())) throw new IOException("Could not preserve modification time");
                         try (RandomAccessFile staged = new RandomAccessFile(stage, "rw")) { staged.getFD().sync(); }
+                        byte[] expected = digest(stage);
                         if (!signature.equals(signature(file, dates))) { waiting++; continue; }
                         Files.move(stage.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
                         MediaScannerConnection.scanFile(context, new String[]{file.getPath()}, null, null);
+                        String writtenSignature = signature(file, dates);
+                        if (!Arrays.equals(expected, digest(file)) || !writtenSignature.equals(signature(file, dates)))
+                            throw new IOException("Saved file did not match the cleaned output.");
+                        signature = writtenSignature;
                     }
-                    if (edit) db.execSQL("INSERT OR REPLACE INTO seen VALUES(?, ?)", new Object[]{file.getPath(), signature(file, dates)});
+                    if (edit) db.execSQL("INSERT OR REPLACE INTO seen VALUES(?, ?)", new Object[]{file.getPath(), signature});
                     if (needsChange) changed++; else clean++;
                 } catch (MediaCleaner.Unsupported unsupported) {
                     skipped++;
@@ -131,10 +140,24 @@ final class Scanner {
         } finally {
             if (preview != null) preview.delete();
         }
-        return (edit ? "Cleaned " : "Would update ") + changed + " · No targeted tags " + clean +
+        return (edit ? "Cleaned and verified " : "Would update ") + changed + " · No targeted tags " + clean +
             "\nSkipped " + skipped + " · Errors " + errors + " · Waiting " + waiting +
             (queue.isEmpty() ? "" : "\nScan stopped before reaching every file.") +
             (issue == null || issue.isEmpty() ? "" : "\nLast issue: " + issue);
+    }
+
+    private static byte[] digest(File file) throws IOException {
+        MessageDigest hash;
+        try { hash = MessageDigest.getInstance("SHA-256"); }
+        catch (NoSuchAlgorithmException unavailable) { throw new AssertionError(unavailable); }
+        try (InputStream in = new FileInputStream(file)) {
+            byte[] buffer = new byte[128 * 1024];
+            for (int count; (count = in.read(buffer)) != -1;) {
+                if (Thread.currentThread().isInterrupted()) throw new InterruptedIOException();
+                hash.update(buffer, 0, count);
+            }
+        }
+        return hash.digest();
     }
 
     private static String signature(File file, boolean dates) throws IOException {

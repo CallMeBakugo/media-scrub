@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-labelledby="title">
+  <title id="title">Media Scrub — metadata blocked</title>
+  <rect width="108" height="108" rx="25" fill="#172C36"/>
+  <path d="M36 33H61L72 44V73Q72 76 69 76H39Q36 76 36 73Z" fill="#F3FAF5"/>
+  <path d="M61 33V44H72Z" fill="#AACFC4"/>
+  <path d="M44 47H56V50H44ZM44 55H64V58H44ZM44 63H60V66H44Z" fill="#32535A"/>
+  <circle cx="54" cy="54" r="29" fill="none" stroke="#172C36" stroke-width="8"/>
+  <path d="M34 74L74 34" stroke="#172C36" stroke-width="10"/>
+  <circle cx="54" cy="54" r="29" fill="none" stroke="#69E3BB" stroke-width="5"/>
+  <path d="M34 74L74 34" stroke="#69E3BB" stroke-width="5" stroke-linecap="round"/>
+</svg>

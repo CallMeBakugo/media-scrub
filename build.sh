@@ -13,7 +13,8 @@ mkdir "$temporary/classes" "$temporary/dex"
 javac --release 17 -cp "$platform" -d "$temporary/classes" src/app/mediascrub/*.java
 jar --create --file "$temporary/classes.jar" -C "$temporary/classes" .
 "$tools/d8" --release --lib "$platform" --min-api 30 --output "$temporary/dex" "$temporary/classes.jar"
-"$tools/aapt2" link -I "$platform" --manifest AndroidManifest.xml --min-sdk-version 30 --target-sdk-version 36 -o "$temporary/raw.apk"
+"$tools/aapt2" compile --dir res -o "$temporary/resources.zip"
+"$tools/aapt2" link -I "$platform" --manifest AndroidManifest.xml --min-sdk-version 30 --target-sdk-version 36 -o "$temporary/raw.apk" "$temporary/resources.zip"
 (cd "$temporary/dex" && zip -q -X "$temporary/raw.apk" classes.dex)
 "$tools/zipalign" -f 4 "$temporary/raw.apk" "$temporary/aligned.apk"
 password=()
