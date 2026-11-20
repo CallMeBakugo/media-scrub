@@ -1,40 +1,57 @@
+<img src="artwork/media-scrub.svg" width="80" height="80" alt="Media Scrub icon">
+
 # Media Scrub
 
-Media Scrub removes common identifying metadata from shared photos and videos in an Android profile. It runs locally and has no network permission. It processes common JPEG, PNG/APNG, WebP, GIF, HEIF/HEIC, AVIF, JPEG 2000, JPEG XL, Photoshop, MP4, and MOV layouts. The cleaner copies encoded media directly and keeps the same filename and folder. During a write it stages a hidden temporary file beside the original and replaces the file only if that operation is supported.
+**Automatic metadata cleanup for Android photos and videos.**
+
+A saved image can carry a source URL in a comment or an IPTC field. A camera photo can carry GPS coordinates, a device model, or a serial number. Pick the folder you want cleaned and Media Scrub can take care of new files in the background.
+
+[Download the signed APK](https://github.com/CallMeBakugo/media-scrub/releases/latest) · [Add to Obtainium](#install-with-obtainium) · [See supported formats](#format-coverage)
+
+- **Offline by design.** Every scan and edit happens on your device. The app has no network permission.
+- **One file in your gallery.** The cleaned file takes the original path and filename. The app copies encoded image, audio, and video data without re-encoding.
+- **See what disappeared.** Inspect a single file before cleaning, then read the saved file again to see which recognized fields are gone.
+- **Pick what to scan.** Start with a test folder or use a shared folder such as Downloads or Camera. Setup with GrapheneOS Storage Scopes and automatic cleanup have both been tested on a phone.
+
+## Install with Obtainium
+
+Add `https://github.com/CallMeBakugo/media-scrub` as an app source in Obtainium. It follows the signed APKs attached to [GitHub Releases](https://github.com/CallMeBakugo/media-scrub/releases). You can also install `media-scrub.apk` directly. Requires Android 11 or newer.
 
 ## Try it on GrapheneOS
 
-1. Install `media-scrub.apk` from the GitHub release. In Obtainium, add the repository URL to receive updates.
-2. Create a folder such as `Pictures/MediaScrubTest`. Put disposable copies of several images and videos in it. Keep your comparison originals outside the folder.
-3. Open Media Scrub and tap **Android storage settings**. If your GrapheneOS build offers **Storage Scopes** for the app, add only that test folder. Standard Android offers **All files access**. The app uses direct file access for safe replacement, so selecting a folder in the file picker alone does not give it that access.
-4. In the app, tap **Choose test folder** and select the same directory. Run **Preview scan** to see what would change. Then tap **Clean now** and compare the files with your originals. Check playback, orientation, and file count. **Cleaned and verified** means the app reopened the saved file and matched its SHA-256 hash against the cleaned output. For an independent metadata check on your computer, compare the before and after files with `exiftool -a -G1 -s before.jpg after.jpg` (use the actual filenames, including for video).
-5. After the manual test, turn on **Clean automatically** and add another tagged file. The background scan is scheduled about every 15 minutes and can run later under Android battery or storage restrictions. Tap **Clean now** for an immediate pass. Files recently modified are deferred so that camera writes and downloads have time to finish.
+1. **Start with a test folder.** Copy a few photos or videos into a folder such as `Pictures/MediaScrubTest`.
+2. **Grant access.** In Media Scrub, tap **Android storage settings**. If GrapheneOS offers **Storage Scopes** for the app, grant access to that folder. Standard Android offers **All files access**. Then tap **Choose test folder** in Media Scrub and select the same folder. The system folder picker identifies the folder, and the storage setting grants access for same-path replacement.
+3. **Preview and clean.** Tap **Preview scan** for a folder summary, or **Inspect one file** for a field-by-field comparison. **Clean now** updates the selected folder. A file counts as **Cleaned and verified** once the app reopens it and matches its SHA-256 hash to the cleaned output.
+4. **Let it run.** Enable **Clean automatically**. Android schedules scans roughly every 15 minutes and can defer them when idle or low on battery or storage. The cleaner waits for recently modified files so camera writes and downloads have time to finish.
 
-The default date setting keeps common embedded capture dates. The date switch removes the date fields this release supports. Filesystem timestamps and names can still expose dates. Shared internal storage is scanned within the selected profile and permission scope. **Use shared storage** scans all visible shared folders in that profile.
+**Use shared storage** scans accessible shared folders in the current profile. Common embedded capture dates are kept by default. Use the date switch to remove the capture date fields the app supports.
 
 ## Inspect one file
 
-Tap **Inspect one file** and select a photo or video. The report compares recognized fields on the current file with a cleanup preview, using your current date setting. Bold rows show the differences. Some blocks are listed by name without displaying their contents. The preview leaves the selected file untouched.
+Choose a photo or video to compare its recognized metadata with a cleanup preview. For example, an image might show **GPS location → Will be removed** while keeping its orientation. Fields that would change are shown in bold. Some metadata blocks appear by name alone.
 
-After cleaning the folder, tap **Recheck the inspected file** to compare the first read with a fresh read of the saved file. The comparison is kept for the current app screen. If Android revokes the picker link after a replacement, select the file again to inspect its current metadata. The optional inspector accepts files up to 512 MiB.
+After cleanup, use **Recheck the inspected file** to compare the first inspection with a fresh read of the saved file. The comparison stays in memory on the current app screen. If Android revokes the picker link after replacement, select the file again to inspect its current metadata. The inspector accepts files up to 512 MiB. On a computer with ExifTool, you can also compare two copies with `exiftool -a -G1 -s before.jpg after.jpg`.
 
 ## Format coverage
 
-- **JPEG, PNG/APNG, WebP.** Removes common EXIF identifiers, standalone XMP where safe, JPEG comments, PNG text, and recognized JPEG Photoshop IPTC resources. Preserves encoded pixels, orientation, ICC profiles, and APNG frame and timing data. JPEGs with motion, gain maps, or other auxiliary layouts may be skipped.
-- **GIF.** Removes comments and standard XMP application blocks. Copies frames, palettes, timing, disposal, transparency, and loop extensions.
-- **HEIF/HEIC and AVIF.** Removes identifying EXIF fields from supported still-image layouts. Rewrites only unshared, contiguous EXIF data. XMP, auxiliary image data, and other container fields are outside this cleanup.
-- **JP2/JPX and JPEG XL.** Removes recognized XMP from top-level XML boxes in supported containers. Other boxes and raw JPEG XL codestreams are outside this cleanup.
-- **PSD and PSB.** Removes recognized IPTC and XMP resources. Layer data and image data are copied unchanged. Alternate resource layouts may be skipped.
-- **MP4 and MOV.** Clears common identifying container fields such as location, make, model, author, and comments. Encoded audio and video, rotation, and timing are preserved. Some fragmented and proprietary layouts and auxiliary tracks are skipped.
+| Format | What Media Scrub can remove |
+| --- | --- |
+| **JPEG** | Common EXIF identifiers, comments, supported standalone XMP, and recognized Photoshop IPTC/XMP resources |
+| **PNG, APNG, WebP** | Common EXIF identifiers, PNG text fields, and supported WebP XMP |
+| **GIF** | Comments and standard XMP application blocks, with frames, timing, transparency, and looping preserved |
+| **Still HEIC, HEIF, AVIF** | Identifying EXIF fields from supported, unshared metadata items |
+| **Boxed JP2, JPX, JPEG XL** | Recognized XMP in top-level XML boxes |
+| **PSD, PSB** | Recognized IPTC and XMP resources, with layer and image data preserved |
+| **MP4, MOV** | Common container tags such as location, camera make and model, author, and comments |
 
-Each format supports a different subset of metadata. **No supported changes** means the cleaner made no changes under the current settings. URLs and other identifiers can remain in unhandled metadata, filenames, sidecar files, or visible content. TIFF, camera RAW, SVG, ICO, and WebM/MKV are outside this release's cleanup coverage.
+Coverage varies by file layout. **No supported changes** means the cleaner made no changes under the current settings. Motion photos, some Ultra HDR files, camera RAW, TIFF, SVG, ICO, WebM/MKV, and other unsupported layouts may be skipped. Identifiers can remain in unhandled metadata, filenames, sidecars, or the visible content. Media Scrub asks Android to rescan updated files so gallery apps can refresh their own records.
 
-Android may maintain its own gallery database and thumbnails. Media Scrub requests a rescan after replacement. Test how your gallery and backup apps handle the update on your handset before broadening the folder scope.
+## Build and verify
 
-## Build and check
+The release build uses OpenJDK 21, Android SDK Platform 36, Android Build Tools 36.0.0, and Info-ZIP. Set `ANDROID_HOME` and run `./build.sh --unsigned media-scrub-unsigned.apk` to build without a signing key. For a signed release, set `MEDIA_SCRUB_KEYSTORE` to the absolute path of a keystore with the `media-scrub` alias and run `./build.sh`.
 
-The app requires Android 11 or newer. The release build uses OpenJDK 21, Android SDK Platform 36, Android Build Tools 36.0.0, and Info-ZIP. Set `ANDROID_HOME` and run `./build.sh --unsigned media-scrub-unsigned.apk` to rebuild without a signing key. For a signed release, set `MEDIA_SCRUB_KEYSTORE` to an absolute path to a keystore with the `media-scrub` alias and run `./build.sh`. Keep the release key for in-place updates.
+Two independent local builds of 0.2.0 matched. Copying the release signature onto a local rebuild reproduced the published APK byte for byte.
 
-Run `python3 tests/smoke.py` with a JDK, Pillow, and FFmpeg. The HEIC and Photoshop cases also use libheif and ImageMagick when available. Fixtures verify removal and preservation using decoded pixels, animation properties, color profiles, or encoded streams, depending on format.
+Run `python3 tests/smoke.py` with a JDK, Pillow, and FFmpeg. The HEIC and Photoshop cases also use libheif and ImageMagick when available. The fixtures check metadata removal and compare decoded pixels, animation properties, color profiles, or encoded streams as applicable.
 
-The code and original project artwork are available under the [MIT license](LICENSE).
+The code and original artwork are available under the [MIT license](LICENSE).
