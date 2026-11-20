@@ -24,6 +24,8 @@ final class Scanner {
     static final long MIN_FILE_AGE_MS = 30_000L;
     private static final String TEMP = ".media-scrub-";
 
+    private record ScanResult(String summary, String reportId, int skipped) {}
+
     static SharedPreferences prefs(Context context) {
         return context.getSharedPreferences("media-scrub", Context.MODE_PRIVATE);
     }
@@ -35,7 +37,7 @@ final class Scanner {
             String folder = settings.getString(FOLDER, "");
             if (folder.isEmpty()) return "Choose a folder first.";
             boolean dates = settings.getBoolean(DATES, false);
-            String result;
+            ScanResult result;
             try {
                 File storage = Environment.getExternalStorageDirectory().getCanonicalFile();
                 File root = new File(storage, folder).getCanonicalFile();
@@ -44,13 +46,15 @@ final class Scanner {
                     throw new IOException("Choose a folder in shared internal storage.");
                 result = scan(context, root, settings, folder, edit, dates, background);
             } catch (IOException | SecurityException error) {
-                result = "Scan could not start. Check folder access in Android settings. " + error.getMessage();
+                result = new ScanResult("Scan could not start. Check folder access in Android settings. "
+                    + error.getMessage(), "", 0);
             }
             if (Thread.currentThread().isInterrupted()) return "";
-            if (background && (!folder.equals(settings.getString(FOLDER, "")) ||
-                !settings.getBoolean(AUTO, false))) return "";
-            settings.edit().putString(RESULT, result).apply();
-            return result;
+            if (!folder.equals(settings.getString(FOLDER, "")) ||
+                (background && (!settings.getBoolean(AUTO, false) || dates != settings.getBoolean(DATES, false)))) return "";
+            settings.edit().putString(RESULT, result.summary)
+                .putString(SkippedFiles.REPORT_ID, result.reportId).putInt(SkippedFiles.COUNT, result.skipped).apply();
+            return result.summary;
         }
     }
 
@@ -60,10 +64,11 @@ final class Scanner {
             || relative.equals("Android/obb") || relative.startsWith("Android/obb/");
     }
 
-    private static String scan(Context context, File root, SharedPreferences settings, String folder,
+    private static ScanResult scan(Context context, File root, SharedPreferences settings, String folder,
         boolean edit, boolean dates, boolean background) throws IOException {
         ArrayDeque<File> queue = new ArrayDeque<>();
         queue.add(root);
+        String reportId = UUID.randomUUID().toString();
         int changed = 0, clean = 0, skipped = 0, errors = 0, waiting = 0;
         String issue = "";
         long deadline = System.nanoTime() + 6L * 60 * 1_000_000_000;
@@ -71,6 +76,7 @@ final class Scanner {
         File preview = null;
         try (SQLiteDatabase db = context.openOrCreateDatabase("scans.db", Context.MODE_PRIVATE, null)) {
             db.execSQL("CREATE TABLE IF NOT EXISTS seen(path TEXT PRIMARY KEY, signature TEXT NOT NULL)");
+            SkippedFiles.begin(db);
             if (!edit) preview = File.createTempFile("preview-", ".tmp", context.getCacheDir());
             while (!queue.isEmpty()) {
                 if (Thread.currentThread().isInterrupted()) break;
@@ -97,7 +103,11 @@ final class Scanner {
                 }
                 if (!MediaCleaner.supported(name)) {
                     int dot = name.lastIndexOf('.');
-                    if (dot >= 0 && OTHER.contains(name.substring(dot + 1).toLowerCase(java.util.Locale.ROOT))) skipped++;
+                    String extension = dot < 0 ? "" : name.substring(dot + 1).toLowerCase(java.util.Locale.ROOT);
+                    if (file.isFile() && OTHER.contains(extension)) {
+                        SkippedFiles.add(db, root, file, "Format not supported (." + extension + ").");
+                        skipped++;
+                    }
                     continue;
                 }
                 if (!file.isFile()) continue;
@@ -132,8 +142,8 @@ final class Scanner {
                     if (edit) db.execSQL("INSERT OR REPLACE INTO seen VALUES(?, ?)", new Object[]{file.getPath(), signature});
                     if (needsChange) changed++; else clean++;
                 } catch (MediaCleaner.Unsupported unsupported) {
+                    SkippedFiles.add(db, root, file, unsupported.getMessage());
                     skipped++;
-                    issue = unsupported.getMessage();
                 } catch (IOException | SecurityException failure) {
                     errors++;
                     issue = failure.getMessage();
@@ -141,13 +151,18 @@ final class Scanner {
                     if (edit && stage != null) stage.delete();
                 }
             }
+            if (!Thread.currentThread().isInterrupted() && folder.equals(settings.getString(FOLDER, "")) &&
+                (!background || (settings.getBoolean(AUTO, false) && dates == settings.getBoolean(DATES, false)))) {
+                SkippedFiles.publish(db, reportId);
+            }
         } finally {
             if (preview != null) preview.delete();
         }
-        return (edit ? "Cleaned and verified " : "Would update ") + changed + " · No supported changes " + clean +
+        String summary = (edit ? "Cleaned and verified " : "Would update ") + changed + " · No supported changes " + clean +
             "\nSkipped " + skipped + " · Errors " + errors + " · Waiting " + waiting +
             (queue.isEmpty() ? "" : "\nScan stopped before reaching every file.") +
-            (issue == null || issue.isEmpty() ? "" : "\nLast issue: " + issue);
+            (issue == null || issue.isEmpty() ? "" : "\nLast error: " + issue);
+        return new ScanResult(summary, reportId, skipped);
     }
 
     private static byte[] digest(File file) throws IOException {

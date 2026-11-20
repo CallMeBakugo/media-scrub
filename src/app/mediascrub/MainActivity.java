@@ -16,7 +16,7 @@ public final class MainActivity extends Activity {
     private Button interval;
     private LinearLayout panel;
     private Switch dates, auto;
-    private Button preview, clean, inspect, recheck;
+    private Button preview, clean, inspect, recheck, skipped;
     private Uri inspectedUri;
     private MetadataInspector.Report firstInspection;
     private boolean busy;
@@ -78,6 +78,7 @@ public final class MainActivity extends Activity {
         });
         recheck = button("Recheck the inspected file", () -> inspect(inspectedUri, true));
         status = label("", 16);
+        skipped = button("View skipped files", this::showSkippedFiles);
         render();
     }
 
@@ -135,6 +136,50 @@ public final class MainActivity extends Activity {
             lastScan += "\nMedia changes unavailable. Scheduled scans are still enabled.";
         automaticStatus.setText(lastScan);
         status.setText(busy ? "Scanning…" : settings.getString(Scanner.RESULT, "Run a preview to see what would change."));
+        int count = settings.getInt(SkippedFiles.COUNT, 0);
+        skipped.setVisibility(count > 0 ? View.VISIBLE : View.GONE);
+        skipped.setEnabled(!busy);
+        skipped.setText("View skipped files (" + count + ")");
+    }
+
+    private void showSkippedFiles() {
+        String reportId = settings.getString(SkippedFiles.REPORT_ID, "");
+        if (reportId.isEmpty()) return;
+        new Thread(() -> {
+            try {
+                var entries = SkippedFiles.read(getApplicationContext(), reportId);
+                runOnUiThread(() -> {
+                    if (isDestroyed() || isFinishing()) return;
+                    if (entries.isEmpty()) {
+                        Toast.makeText(this, "The scan report changed. Tap again to view the current report.",
+                            Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    ListView list = new ListView(this);
+                    list.setAdapter(new ArrayAdapter<SkippedFiles.Entry>(this, android.R.layout.simple_list_item_2,
+                            android.R.id.text1, entries) {
+                        @Override public View getView(int position, View convertView, ViewGroup parent) {
+                            View row = super.getView(position, convertView, parent);
+                            SkippedFiles.Entry entry = getItem(position);
+                            TextView path = row.findViewById(android.R.id.text1);
+                            TextView reason = row.findViewById(android.R.id.text2);
+                            path.setSingleLine(false);
+                            reason.setSingleLine(false);
+                            path.setText(entry.path().replaceAll("[\\p{Cc}\\p{Cf}]", "�"));
+                            reason.setText(entry.reason());
+                            return row;
+                        }
+                    });
+                    new AlertDialog.Builder(this).setTitle("Skipped files (" + entries.size() + ")")
+                        .setView(list).setPositiveButton("Done", null).show();
+                });
+            } catch (android.database.SQLException unavailable) {
+                runOnUiThread(() -> {
+                    if (!isDestroyed() && !isFinishing())
+                        Toast.makeText(this, "Could not open the skipped-files report.", Toast.LENGTH_SHORT).show();
+                });
+            }
+        }, "Read skipped files").start();
     }
 
     private void confirm(String title, String message, Runnable action) {
@@ -146,7 +191,8 @@ public final class MainActivity extends Activity {
         if (busy) return;
         setAuto(false);
         settings.edit().putString(Scanner.FOLDER, selected).remove(Scanner.RESULT)
-            .remove(ScanJob.LAST_SCAN).remove(ScanJob.LAST_TRIGGER).apply();
+            .remove(ScanJob.LAST_SCAN).remove(ScanJob.LAST_TRIGGER)
+            .remove(SkippedFiles.REPORT_ID).remove(SkippedFiles.COUNT).apply();
     }
 
     private void setAuto(boolean enabled) {
@@ -273,7 +319,8 @@ public final class MainActivity extends Activity {
         new Thread(() -> {
             try { Scanner.run(getApplicationContext(), edit, false); }
             catch (RuntimeException error) {
-                settings.edit().putString(Scanner.RESULT, "Scan could not complete. " + error.getMessage()).apply();
+                settings.edit().putString(Scanner.RESULT, "Scan could not complete. " + error.getMessage())
+                    .remove(SkippedFiles.REPORT_ID).remove(SkippedFiles.COUNT).apply();
             } finally {
                 runOnUiThread(() -> { busy = false; if (!isDestroyed()) render(); });
             }

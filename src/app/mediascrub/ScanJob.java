@@ -93,7 +93,8 @@ public final class ScanJob extends JobService {
                 result = Scanner.run(this, true, true);
             } catch (RuntimeException failed) {
                 if (!current.isInterrupted())
-                    prefs.edit().putString(Scanner.RESULT, "Automatic scan could not complete.").apply();
+                    prefs.edit().putString(Scanner.RESULT, "Automatic scan could not complete.")
+                        .remove(SkippedFiles.REPORT_ID).remove(SkippedFiles.COUNT).apply();
             } finally {
                 String summary = result;
                 main.post(() -> complete(job, current, summary));

@@ -27,6 +27,10 @@ Add `https://github.com/CallMeBakugo/media-scrub` as an app source in Obtainium.
 
 **Use shared storage** scans accessible shared folders in the current profile. Common embedded capture dates are kept by default. Use the date switch to remove the capture date fields the app supports.
 
+## See what was skipped
+
+If the latest scan skipped any files, tap **View skipped files** below the scan totals. The list shows paths relative to the selected folder and why the cleaner left each file alone, such as an unsupported format or an image layout with auxiliary data. Preview, manual cleanup, and automatic scans all update the report. It stays on the device and is replaced when a new scan finishes.
+
 ## Inspect one file
 
 Choose a photo or video to compare its recognized metadata with a cleanup preview. For example, an image might show **GPS location → Will be removed** while keeping its orientation. Fields that would change are shown in bold. Some metadata blocks appear by name alone.

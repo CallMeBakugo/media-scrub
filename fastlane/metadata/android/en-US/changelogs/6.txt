@@ -1,0 +1,1 @@
+Tap View skipped files after a scan to see the file paths and reasons behind the skipped count.
