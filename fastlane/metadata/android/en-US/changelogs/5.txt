@@ -1,0 +1,1 @@
+Choose 15, 30, or 60 minute background checks. Scans can also run after media changes, and the app shows when the last automatic scan finished.

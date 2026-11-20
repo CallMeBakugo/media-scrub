@@ -4,7 +4,7 @@
 
 **Automatic, offline metadata cleanup for the photos and videos you save on Android.**
 
-Pick a folder, grant storage access, and turn on **Clean automatically** once. Then download images, save GIFs, and take photos as usual. Android starts the scans in the background without you having to reopen Media Scrub or approve each file.
+Pick a folder, grant storage access, and turn on **Clean automatically** once. Then download images, save GIFs, and take photos as usual. Android starts scans in the background when its media library reports a change and at the selected interval. Routine cleanup needs no app launch or per-file approval.
 
 As files arrive in the selected folder, Media Scrub removes supported identifiers such as GPS coordinates, camera details, and source URLs in metadata. Each cleaned file stays at its original name and location, with no extra copy in your gallery and no re-encoding. The app has no network permission.
 
@@ -21,7 +21,9 @@ Add `https://github.com/CallMeBakugo/media-scrub` as an app source in Obtainium.
 1. **Start with a test folder.** Copy a few photos or videos into a folder such as `Pictures/MediaScrubTest`.
 2. **Grant access.** In Media Scrub, tap **Android storage settings**. If GrapheneOS offers **Storage Scopes** for the app, grant access to that folder. Standard Android offers **All files access**. Then tap **Choose test folder** in Media Scrub and select the same folder. The system folder picker identifies the folder, and the storage setting grants access for same-path replacement.
 3. **Preview and clean.** Tap **Preview scan** for a folder summary, or **Inspect one file** for a field-by-field comparison. **Clean now** updates the selected folder. A file counts as **Cleaned and verified** once the app reopens it and matches its SHA-256 hash to the cleaned output.
-4. **Let it run.** Enable **Clean automatically**. Android schedules scans roughly every 15 minutes. Idle, battery, and storage conditions can delay cleanup, so a file shared right after saving may still have its original metadata. The cleaner waits for recently modified files so camera writes and downloads have time to finish.
+4. **Let it run.** Enable **Clean automatically**. Choose **15, 30, or 60 minutes** for the periodic check. The default is 15 minutes. When Android's media library reports a change, Media Scrub also asks to scan the selected folder sooner. The periodic check catches files that don't send a media notification. Android can defer either scan, and the app gives recently modified files time to finish writing.
+
+**Last automatic scan** shows when the app last finished a background scan and whether it was scheduled or prompted by a media change. Use **Clean now** if you plan to share a file before Android runs the next scan.
 
 **Use shared storage** scans accessible shared folders in the current profile. Common embedded capture dates are kept by default. Use the date switch to remove the capture date fields the app supports.
 

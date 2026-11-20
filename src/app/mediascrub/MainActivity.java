@@ -12,7 +12,8 @@ import android.widget.*;
 public final class MainActivity extends Activity {
     private static final int PICK = 410, INSPECT = 411;
     private SharedPreferences settings;
-    private TextView folder, status;
+    private TextView folder, status, automaticStatus;
+    private Button interval;
     private LinearLayout panel;
     private Switch dates, auto;
     private Button preview, clean, inspect, recheck;
@@ -65,6 +66,8 @@ public final class MainActivity extends Activity {
                     () -> setAuto(true));
             } else setAuto(false);
         });
+        interval = button("", this::chooseInterval);
+        automaticStatus = label("", 14);
         preview = button("Preview scan", () -> run(false));
         clean = button("Clean now", () -> confirm("Clean the selected folder?",
             "Media Scrub will update supported files at their existing locations.", () -> run(true)));
@@ -78,7 +81,12 @@ public final class MainActivity extends Activity {
         render();
     }
 
-    @Override protected void onStart() { super.onStart(); settings.registerOnSharedPreferenceChangeListener(listener); render(); }
+    @Override protected void onStart() {
+        super.onStart();
+        settings.registerOnSharedPreferenceChangeListener(listener);
+        if (settings.getBoolean(Scanner.AUTO, false)) ScanJob.schedule(this);
+        render();
+    }
     @Override protected void onStop() { settings.unregisterOnSharedPreferenceChangeListener(listener); super.onStop(); }
 
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
@@ -113,7 +121,19 @@ public final class MainActivity extends Activity {
         recheck.setVisibility(firstInspection == null ? View.GONE : View.VISIBLE);
         recheck.setEnabled(!busy);
         auto.setEnabled(!busy && !selected.isEmpty());
-        auto.setChecked(settings.getBoolean(Scanner.AUTO, false));
+        boolean automatic = settings.getBoolean(Scanner.AUTO, false);
+        auto.setChecked(automatic);
+        interval.setText("Scan interval: " + ScanJob.interval(settings) + " minutes");
+        interval.setEnabled(!busy);
+        long lastRun = settings.getLong(ScanJob.LAST_SCAN, 0);
+        automaticStatus.setVisibility(automatic || lastRun != 0 ? View.VISIBLE : View.GONE);
+        String lastScan = lastRun == 0 ? "Waiting for the first automatic scan." :
+            "Last automatic scan: " + java.text.DateFormat.getDateTimeInstance(
+                java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(new java.util.Date(lastRun)) +
+                " · " + settings.getString(ScanJob.LAST_TRIGGER, "Scheduled");
+        if (automatic && !settings.getBoolean(ScanJob.MEDIA_WATCH, true))
+            lastScan += "\nMedia changes unavailable. Scheduled scans are still enabled.";
+        automaticStatus.setText(lastScan);
         status.setText(busy ? "Scanning…" : settings.getString(Scanner.RESULT, "Run a preview to see what would change."));
     }
 
@@ -125,14 +145,37 @@ public final class MainActivity extends Activity {
     private void changeFolder(String selected) {
         if (busy) return;
         setAuto(false);
-        settings.edit().putString(Scanner.FOLDER, selected).remove(Scanner.RESULT).apply();
+        settings.edit().putString(Scanner.FOLDER, selected).remove(Scanner.RESULT)
+            .remove(ScanJob.LAST_SCAN).remove(ScanJob.LAST_TRIGGER).apply();
     }
 
     private void setAuto(boolean enabled) {
-        boolean ready = ScanJob.schedule(this, enabled);
-        settings.edit().putBoolean(Scanner.AUTO, enabled && ready).apply();
-        if (!ready) settings.edit().putString(Scanner.RESULT, "Android could not schedule background cleaning.").apply();
+        settings.edit().putBoolean(Scanner.AUTO, enabled).apply();
+        if (!ScanJob.schedule(this)) {
+            settings.edit().putBoolean(Scanner.AUTO, false)
+                .putString(Scanner.RESULT, "Android could not schedule background cleaning.").apply();
+            ScanJob.schedule(this);
+        }
         render();
+    }
+
+    private void chooseInterval() {
+        int[] minutes = {15, 30, 60};
+        int previous = ScanJob.interval(settings);
+        int checked = previous == 60 ? 2 : previous == 30 ? 1 : 0;
+        new AlertDialog.Builder(this).setTitle("Automatic scan interval")
+            .setSingleChoiceItems(new String[]{"15 minutes", "30 minutes", "60 minutes"}, checked,
+                (dialog, index) -> {
+                    dialog.dismiss();
+                    if (minutes[index] == previous) return;
+                    settings.edit().putInt(ScanJob.INTERVAL, minutes[index]).apply();
+                    if (!ScanJob.schedule(this)) {
+                        settings.edit().putInt(ScanJob.INTERVAL, previous)
+                            .putString(Scanner.RESULT, "Android could not change the scan interval.").apply();
+                        ScanJob.schedule(this);
+                    }
+                })
+            .setNegativeButton("Cancel", null).show();
     }
 
     @Override protected void onActivityResult(int request, int result, Intent data) {

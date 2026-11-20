@@ -21,6 +21,7 @@ final class Scanner {
     static final String FOLDER = "folder", AUTO = "auto", DATES = "dates", RESULT = "result";
     private static final Set<String> OTHER = Set.of("tiff", "tif", "dng", "bmp", "svg", "ico", "j2k",
         "raf", "cr2", "nef", "arw", "raw", "webm", "mkv", "avi", "3gp", "m4v", "mts", "m2ts");
+    static final long MIN_FILE_AGE_MS = 30_000L;
     private static final String TEMP = ".media-scrub-";
 
     static SharedPreferences prefs(Context context) {
@@ -45,7 +46,10 @@ final class Scanner {
             } catch (IOException | SecurityException error) {
                 result = "Scan could not start. Check folder access in Android settings. " + error.getMessage();
             }
-            if (!Thread.currentThread().isInterrupted()) settings.edit().putString(RESULT, result).apply();
+            if (Thread.currentThread().isInterrupted()) return "";
+            if (background && (!folder.equals(settings.getString(FOLDER, "")) ||
+                !settings.getBoolean(AUTO, false))) return "";
+            settings.edit().putString(RESULT, result).apply();
             return result;
         }
     }
@@ -97,7 +101,7 @@ final class Scanner {
                     continue;
                 }
                 if (!file.isFile()) continue;
-                if (edit && System.currentTimeMillis() - file.lastModified() < 30_000L) { waiting++; continue; }
+                if (edit && System.currentTimeMillis() - file.lastModified() < MIN_FILE_AGE_MS) { waiting++; continue; }
                 File stage = preview;
                 try {
                     String signature = signature(file, dates);
