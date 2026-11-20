@@ -79,6 +79,14 @@ final class MetadataInspector {
             case "image/jpeg" -> "jpg";
             case "image/png" -> "png";
             case "image/webp" -> "webp";
+            case "image/gif" -> "gif";
+            case "image/avif" -> "avif";
+            case "image/heic" -> "heic";
+            case "image/heif" -> "heif";
+            case "image/apng" -> "apng";
+            case "image/jp2" -> "jp2";
+            case "image/jpx" -> "jpx";
+            case "image/jxl" -> "jxl";
             case "video/mp4" -> "mp4";
             case "video/quicktime" -> "mov";
             default -> "media";

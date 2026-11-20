@@ -1,0 +1,5 @@
+Media Scrub removes supported identifying metadata from shared photos and videos on your device. Pick a folder, preview the changes, and optionally enable background cleanup.
+
+The app works offline and has no network permission. It replaces supported files at the same path without creating a second gallery item. It preserves encoded media and reports when the saved file matches the cleaned output.
+
+Inspect an individual file to compare recognized metadata before and after cleanup. Format coverage varies by file layout. See the project README for details.

@@ -1,0 +1,1 @@
+Remove identifying metadata from shared photos and videos offline.

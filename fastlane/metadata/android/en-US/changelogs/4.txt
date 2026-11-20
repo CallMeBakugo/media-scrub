@@ -1,0 +1,1 @@
+Adds GIF, APNG, HEIC/HEIF, AVIF, JP2/JPX, JPEG XL, PSD/PSB, and wider JPEG metadata coverage.

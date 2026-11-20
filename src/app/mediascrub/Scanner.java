@@ -19,7 +19,7 @@ import java.util.UUID;
 
 final class Scanner {
     static final String FOLDER = "folder", AUTO = "auto", DATES = "dates", RESULT = "result";
-    private static final Set<String> OTHER = Set.of("heic", "heif", "avif", "gif", "tiff", "tif", "dng",
+    private static final Set<String> OTHER = Set.of("tiff", "tif", "dng", "bmp", "svg", "ico", "j2k",
         "raf", "cr2", "nef", "arw", "raw", "webm", "mkv", "avi", "3gp", "m4v", "mts", "m2ts");
     private static final String TEMP = ".media-scrub-";
 
@@ -140,7 +140,7 @@ final class Scanner {
         } finally {
             if (preview != null) preview.delete();
         }
-        return (edit ? "Cleaned and verified " : "Would update ") + changed + " · No targeted tags " + clean +
+        return (edit ? "Cleaned and verified " : "Would update ") + changed + " · No supported changes " + clean +
             "\nSkipped " + skipped + " · Errors " + errors + " · Waiting " + waiting +
             (queue.isEmpty() ? "" : "\nScan stopped before reaching every file.") +
             (issue == null || issue.isEmpty() ? "" : "\nLast issue: " + issue);

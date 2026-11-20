@@ -1,6 +1,6 @@
 # Media Scrub
 
-Media Scrub removes common identifying metadata from shared photos and videos in an Android profile. It runs locally and has no network permission. It processes JPEG, PNG, WebP, and common MP4 and MOV layouts. The cleaner copies encoded media directly and keeps the same filename and folder. During a write it stages a hidden temporary file beside the original and replaces the file only if that operation is supported.
+Media Scrub removes common identifying metadata from shared photos and videos in an Android profile. It runs locally and has no network permission. It processes common JPEG, PNG/APNG, WebP, GIF, HEIF/HEIC, AVIF, JPEG 2000, JPEG XL, Photoshop, MP4, and MOV layouts. The cleaner copies encoded media directly and keeps the same filename and folder. During a write it stages a hidden temporary file beside the original and replaces the file only if that operation is supported.
 
 ## Try it on GrapheneOS
 
@@ -20,14 +20,21 @@ After cleaning the folder, tap **Recheck the inspected file** to compare the fir
 
 ## Format coverage
 
-- JPEG, PNG, WebP. The app removes identifying EXIF fields, common standalone XMP, PNG text comments, and JPEG comments. It keeps orientation, embedded ICC profiles, and encoded pixels. It skips recognized motion photos, multi-image JPEGs, auxiliary display metadata such as Ultra HDR gain maps, and JPEG Photoshop resources where safe IPTC removal is pending.
-- MP4 and MOV. The app clears common identifying container fields such as location, make, model, author, and comments. It leaves encoded video, audio, rotation, and their existing timing untouched. Fragmented video, recognized timed metadata tracks, and several unsupported proprietary metadata layouts are skipped.
-- HEIC, AVIF, GIF, RAW, WebM, and other formats listed as skipped are candidates for later releases. Identifiers in unknown fields, filenames, visible content, audio, or previously uploaded copies can remain. A report of **No targeted tags** applies only to fields this release understands.
+- **JPEG, PNG/APNG, WebP.** Removes common EXIF identifiers, standalone XMP where safe, JPEG comments, PNG text, and recognized JPEG Photoshop IPTC resources. Preserves encoded pixels, orientation, ICC profiles, and APNG frame and timing data. JPEGs with motion, gain maps, or other auxiliary layouts may be skipped.
+- **GIF.** Removes comments and standard XMP application blocks. Copies frames, palettes, timing, disposal, transparency, and loop extensions.
+- **HEIF/HEIC and AVIF.** Removes identifying EXIF fields from supported still-image layouts. Rewrites only unshared, contiguous EXIF data. XMP, auxiliary image data, and other container fields are outside this cleanup.
+- **JP2/JPX and JPEG XL.** Removes recognized XMP from top-level XML boxes in supported containers. Other boxes and raw JPEG XL codestreams are outside this cleanup.
+- **PSD and PSB.** Removes recognized IPTC and XMP resources. Layer data and image data are copied unchanged. Alternate resource layouts may be skipped.
+- **MP4 and MOV.** Clears common identifying container fields such as location, make, model, author, and comments. Encoded audio and video, rotation, and timing are preserved. Some fragmented and proprietary layouts and auxiliary tracks are skipped.
+
+Each format supports a different subset of metadata. **No supported changes** means the cleaner made no changes under the current settings. URLs and other identifiers can remain in unhandled metadata, filenames, sidecar files, or visible content. TIFF, camera RAW, SVG, ICO, and WebM/MKV are outside this release's cleanup coverage.
 
 Android may maintain its own gallery database and thumbnails. Media Scrub requests a rescan after replacement. Test how your gallery and backup apps handle the update on your handset before broadening the folder scope.
 
 ## Build and check
 
-Requires Android 11 or later on the phone. To build, install JDK 17+, the Android 36 platform, Build Tools 36.0.0, and `zip`. Set `ANDROID_HOME` and `MEDIA_SCRUB_KEYSTORE`, which must point to a keystore containing the `media-scrub` alias. Run `./build.sh` to produce the signed APK. Keep the same signing key for future updates.
+The app requires Android 11 or newer. The release build uses OpenJDK 21, Android SDK Platform 36, Android Build Tools 36.0.0, and Info-ZIP. Set `ANDROID_HOME` and run `./build.sh --unsigned media-scrub-unsigned.apk` to rebuild without a signing key. For a signed release, set `MEDIA_SCRUB_KEYSTORE` to an absolute path to a keystore with the `media-scrub` alias and run `./build.sh`. Keep the release key for in-place updates.
 
-Run `python3 tests/smoke.py` with a JDK, Pillow and FFmpeg installed. The tests generate their own media and verify metadata removal, orientation, identical decoded images, intact encoded audio and video, date policy, and skipping an image with appended media.
+Run `python3 tests/smoke.py` with a JDK, Pillow, and FFmpeg. The HEIC and Photoshop cases also use libheif and ImageMagick when available. Fixtures verify removal and preservation using decoded pixels, animation properties, color profiles, or encoded streams, depending on format.
+
+The code and original project artwork are available under the [MIT license](LICENSE).
